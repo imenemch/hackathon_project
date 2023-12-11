@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Carnet d'Adresses</title>
+</head>
+<body>
+    <h1>Liste des Contacts</h1>
+    <ul>
+        {% for contact in contacts %}
+            <li>{{ contact[1] }} {{ contact[2] }} - {{ contact[3] }} - {{ contact[4] }}</li>
+        {% endfor %}
+    </ul>
+    <a href="{{ url_for('ajouter') }}">Ajouter un contact</a>
+</body>
+</html>
