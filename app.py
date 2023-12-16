@@ -1,139 +1,477 @@
-import tkinter as tk
-from tkinter import ttk
+# Import de tkinter
+import csv
+from datetime import datetime
+from tkinter import ttk, filedialog
+from tkinter import *
+from tkinter import messagebox
 import sqlite3
+import os
 
-class CarnetGestionAdresses:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Carnet d'adresses")
+fichier_csv = None
+# titre general
+root = Tk()
+root.title("Carnet d'addresses")
+root.geometry("1300x700")
 
-        # Database connection
-        self.conn = sqlite3.connect("carnet_adresses.db")
-        self.cursor = self.conn.cursor()
 
-        # Create a notebook (tabbed interface)
-        self.notebook = ttk.Notebook(root)
-        self.notebook.grid(row=0, column=0, columnspan=3, rowspan=6, padx=10, pady=5, sticky="nesw")
+def ajouter():
+    nom = entrernom.get()
+    prenom = entrerPrenom.get()
+    email = entrermail.get()
+    tel = entrertelephone.get()
+    adresse = entreradresse.get()
+    groupe = entrergroupe.get()
 
-        # Create tabs
-        self.tab_add = ttk.Frame(self.notebook)
-        self.tab_search = ttk.Frame(self.notebook)
-        self.tab_delete = ttk.Frame(self.notebook)
+    # Vérifier si les champs obligatoires ne sont pas vides
+    if not nom or not prenom or not email or not tel or not adresse:
+        messagebox.showerror("Erreur", "Tous les champs doivent être remplis.")
+        return  # Arrêter la fonction si un champ est vide
 
-        # Add tabs to the notebook
-        self.notebook.add(self.tab_add, text='Ajouter')
-        self.notebook.add(self.tab_search, text='Rechercher')
-        self.notebook.add(self.tab_delete, text='Supprimer')
+    # Vérifier le format de l'e-mail
+    if "@" not in email or (".fr" not in email and ".com" not in email):
+        messagebox.showerror("Erreur", "Format d'e-mail invalide.")
+        return  # Arrêter la fonction si l'e-mail est invalide
 
-        # Initialize each tab
-        self.init_add_tab()
-        self.init_search_tab()
-        self.init_delete_tab()
+    # Vérifier si le contact existe déjà
+    if contact_existe(nom, prenom):
+        messagebox.showerror("Erreur", "Ce contact existe déjà dans le carnet d'adresses.")
+        return
 
-    def init_add_tab(self):
-        ttk.Label(self.tab_add, text="Nom:").grid(row=0, column=0, pady=5)
-        ttk.Label(self.tab_add, text="Prénom:").grid(row=1, column=0, pady=5)
-        ttk.Label(self.tab_add, text="Email:").grid(row=2, column=0, pady=5)
-        ttk.Label(self.tab_add, text="Téléphone:").grid(row=3, column=0, pady=5)
+    # Création de la connexion
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    # Convertir la date en chaîne au format ISO 8601
+    date_ajout = datetime.today().isoformat()
 
-        self.entry_nom = ttk.Entry(self.tab_add)
-        self.entry_prenom = ttk.Entry(self.tab_add)
-        self.entry_email = ttk.Entry(self.tab_add)
-        self.entry_telephone = ttk.Entry(self.tab_add)
+    cuser.execute(
+        "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
+        (nom, prenom, email, tel, adresse, groupe, date_ajout))
 
-        self.entry_nom.grid(row=0, column=1, pady=5)
-        self.entry_prenom.grid(row=1, column=1, pady=5)
-        self.entry_email.grid(row=2, column=1, pady=5)
-        self.entry_telephone.grid(row=3, column=1, pady=5)
+    # Récupérer l'ID de la dernière ligne insérée
+    last_id = cuser.lastrowid
 
-        ttk.Button(self.tab_add, text="Ajouter", command=self.ajouter_contact).grid(row=4, column=0, columnspan=2, pady=10)
+    con.commit()
+    con.close()
 
-    def ajouter_contact(self):
-        nom = self.entry_nom.get()
-        prenom = self.entry_prenom.get()
-        email = self.entry_email.get()
-        telephone = self.entry_telephone.get()
+    # Afficher le dernier contact ajouté
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    select = cuser.execute(f"SELECT * FROM contacts WHERE id = {last_id}")
+    row = select.fetchone()
+    table.insert('', END, values=row)
+    con.close()
 
-        try:
-            self.add_contact(nom, prenom, email, telephone)
-            # Optionally, clear the entry fields after adding
-            self.entry_nom.delete(0, "end")
-            self.entry_prenom.delete(0, "end")
-            self.entry_email.delete(0, "end")
-            self.entry_telephone.delete(0, "end")
-        except Exception as e:
-            tk.messagebox.showerror("Erreur", f"Erreur lors de l'ajout : {str(e)}")
+    # Afficher le message d'information
+    messagebox.showinfo("Succès", "Contact ajouté avec succès!")
 
-    def add_contact(self, nom, prenom, email=None, telephone=None):
-        self.cursor.execute('''
-            INSERT INTO contacts (nom, prenom, email, telephone)
-            VALUES (?, ?, ?, ?)
-        ''', (nom, prenom, email, telephone))
-        self.conn.commit()
+    # Effacer les entrées
+    entrernom.delete(0, END)
+    entrerPrenom.delete(0, END)
+    entrermail.delete(0, END)
+    entrertelephone.delete(0, END)
+    entreradresse.delete(0, END)
+    entrergroupe.delete(0, END)
 
-    def init_search_tab(self):
-        ttk.Label(self.tab_search, text="Recherche:").grid(row=0, column=0, pady=5)
-        self.entry_recherche = ttk.Entry(self.tab_search)
-        self.entry_recherche.grid(row=0, column=1, pady=5)
-        ttk.Button(self.tab_search, text="Rechercher", command=self.rechercher_contacts).grid(row=1, column=0, columnspan=2, pady=10)
+def afficher_donnees_selectionnees(event):
+    # Récupérer l'ID de l'élément sélectionné
+    contact = table.selection()
+    if contact:
+        values = table.item(contact, 'values')
+        entrernom.delete(0, END)
+        entrerPrenom.delete(0, END)
+        entrermail.delete(0, END)
+        entrertelephone.delete(0, END)
+        entreradresse.delete(0, END)
+        entrergroupe.delete(0, END)
 
-        # Display area for search results (adjust as needed)
-        self.results_text = tk.Text(self.tab_search, height=10, width=40)
-        self.results_text.grid(row=2, column=0, columnspan=2, pady=5)
+        entrernom.insert(0, values[1])
+        entrerPrenom.insert(0, values[2])
+        entrermail.insert(0, values[3])
+        entrertelephone.insert(0, values[4])
+        entreradresse.insert(0, values[5])
+        entrergroupe.insert(0,values[6])
 
-    def rechercher_contacts(self):
-        recherche = self.entry_recherche.get()
-        try:
-            results = self.search_contacts(recherche)
-            # Display or process the results as needed
-            self.results_text.delete(1.0, "end")
-            for result in results:
-                self.results_text.insert("end", f"{result}\n")
-        except Exception as e:
-            tk.messagebox.showerror("Erreur", f"Erreur lors de la recherche : {str(e)}")
 
-    def search_contacts(self, recherche):
-        self.cursor.execute('''
-            SELECT * FROM contacts
-            WHERE nom LIKE ? OR prenom LIKE ? OR email LIKE ? OR telephone LIKE ?
-        ''', (f'%{recherche}%', f'%{recherche}%', f'%{recherche}%', f'%{recherche}%'))
-        return self.cursor.fetchall()
+def modifier():
+    # Récupérer l'ID de l'élément sélectionné
+    contact = table.selection()
+    if contact:
+        id_selectionne = table.item(contact)['values'][0]
+        nom_selectionne = table.item(contact)['values'][1]
+        prenom_selectionne = table.item(contact)['values'][2]
+        email_selectionne = table.item(contact)['values'][3]
+        telephone_selectionne = table.item(contact)['values'][4]
+        adresse_selectionne = table.item(contact)['values'][5]
+        groupe_selectionne = table.item(contact)['values'][6]
+        date_selectionne = table.item(contact)['values'][7]
 
-    def init_delete_tab(self):
-        ttk.Label(self.tab_delete, text="ID du contact à supprimer:").grid(row=0, column=0, pady=5)
-        self.entry_suppression = ttk.Entry(self.tab_delete)
-        self.entry_suppression.grid(row=0, column=1, pady=5)
-        ttk.Button(self.tab_delete, text="Supprimer", command=self.supprimer_contact).grid(row=1, column=0, columnspan=2, pady=10)
+        # Récupérer les nouvelles valeurs des entrées
+        nom = entrernom.get()
+        prenom = entrerPrenom.get()
+        email = entrermail.get()
+        telephone = entrertelephone.get()
+        adresse = entreradresse.get()
+        groupe = entrergroupe.get()
 
-    def supprimer_contact(self):
-        contact_id = self.entry_suppression.get()
 
-        # Vérifier si l'ID est un entier
-        try:
-            contact_id = int(contact_id)
-        except ValueError:
-            # Afficher un message d'erreur si l'ID n'est pas un entier
-            tk.messagebox.showerror("Erreur", "Veuillez entrer un ID valide.")
-            return
+        # Vérifier les modifications et mettre à jour les champs modifiés
+        if not nom:
+            nom = nom_selectionne
+        if not prenom:
+            prenom = prenom_selectionne
+        if not email:
+            email = email_selectionne
+        if not telephone:
+            telephone = telephone_selectionne
+        if not adresse:
+            adresse = adresse_selectionne
+        if not groupe:
+            groupe = groupe_selectionne
 
-        try:
-            # Supprimer le contact de la base de données
-            self.delete_contact(contact_id)
+        # Afficher la date sélectionnée dans la console
+        print(f"Date sélectionnée : {id_selectionne}")
 
-            # Effacer les champs de saisie après la suppression
-            self.entry_suppression.delete(0, "end")
-        except Exception as e:
-            # Afficher une fenêtre d'erreur en cas d'échec de suppression
-            tk.messagebox.showerror("Erreur", f"Erreur lors de la suppression : {str(e)}")
+        # Mettre à jour les informations du contact dans la base de données
+        con = sqlite3.connect('carnet_adresses.db')
+        cuser = con.cursor()
+        cuser.execute(
+            "UPDATE contacts SET nom=?, prenom=?, email=?, telephone=?, adresse=?, groupe=?, date_ajout=? WHERE id = ?",
+            (nom, prenom, email, telephone, adresse, groupe, date_selectionne, id_selectionne))
+        con.commit()
+        con.close()
 
-    def delete_contact(self, contact_id):
-        self.cursor.execute('''
-            DELETE FROM contacts
-            WHERE id = ?
-        ''', (contact_id,))
-        self.conn.commit()
+        # Mettre à jour la ligne existante dans la table
+        table.item(contact, values=(id_selectionne, nom, prenom, email, telephone, adresse,groupe))
 
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = CarnetGestionAdresses(root)
-    root.mainloop()
+        messagebox.showinfo("Succès", "Contact modifié avec succès !!")
+
+        # Effacer les entrées
+        entrernom.delete(0, END)
+        entrerPrenom.delete(0, END)
+        entrermail.delete(0, END)
+        entrertelephone.delete(0, END)
+        entreradresse.delete(0, END)
+        entrergroupe.delete(0, END)
+
+def supprimer():
+    idSelectionner = table.item(table.selection())['values'][0]
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    delete  =cuser.execute("delete from contacts where id = {}".format(idSelectionner))
+    con.commit()
+    table.delete(table.selection())
+
+    # Suppression des entrées
+    entrernom.delete(0, END)
+    entrerPrenom.delete(0, END)
+    entrermail.delete(0, END)
+    entrertelephone.delete(0, END)
+    entreradresse.delete(0, END)
+    entrergroupe.delete(0, END)
+
+def rechercher_contact():
+    # Récupérer les critères de recherche
+    nom_recherche = entryRechercheNom.get()
+    email_recherche = entryRechercheEmail.get()
+
+    # Effacer la table
+    table.delete(*table.get_children())
+
+    # Requête de recherche dans la base de données
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+
+    if nom_recherche:
+        query = f"SELECT * FROM contacts WHERE nom LIKE '%{nom_recherche}%'"
+    elif email_recherche:
+        query = f"SELECT * FROM contacts WHERE email LIKE '%{email_recherche}%'"
+    else:
+        # Si aucun critère de recherche n'est spécifié, afficher tous les contacts
+        query = "SELECT * FROM contacts"
+
+    select = cuser.execute(query)
+
+    for row in select:
+        table.insert('', END, values=row)
+
+    con.close()
+
+# Fonctions de tri et de filtres
+def tri_par_nom():
+    # Supprimer toutes les lignes actuelles de la table
+    table.delete(*table.get_children())
+
+    # Récupérer les contacts triés par nom depuis la base de données
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    select = cuser.execute("SELECT * FROM contacts ORDER BY nom ASC")
+    for row in select:
+        table.insert('', END, values=row)
+    con.close()
+
+def tri_par_date():
+    # Supprimer toutes les lignes actuelles de la table
+    table.delete(*table.get_children())
+
+    # Récupérer les contacts triés par date d'ajout depuis la base de données
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    select = cuser.execute("SELECT * FROM contacts ORDER BY date_ajout ASC")
+    for row in select:
+        table.insert('', END, values=row)
+    con.close()
+
+def filtre_par_groupe():
+    # Supprimer toutes les lignes actuelles de la table
+    table.delete(*table.get_children())
+
+    # Récupérer les contacts filtrés par groupe depuis la base de données
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    select = cuser.execute("SELECT * FROM contacts WHERE groupe = ? ORDER BY id ASC", (entrergroupe.get(),))
+    for row in select:
+        table.insert('', END, values=row)
+    con.close()
+
+# Fonction pour exporter les contacts au format CSV
+def exporter_csv():
+    try:
+        # Demander à l'utilisateur où sauvegarder le fichier CSV
+        fichier_csv = filedialog.asksaveasfilename(defaultextension=".csv", filetypes=[("Fichiers CSV", "*.csv")])
+
+        if fichier_csv:
+            # Ouvrir le fichier CSV en mode écriture
+            with open(fichier_csv, mode='w', newline='', encoding='utf-8') as fichier:
+                writer = csv.writer(fichier)
+
+                # Écrire l'en-tête du CSV
+                writer.writerow(['ID', 'Nom', 'Prénom', 'E-mail', 'Téléphone', 'Adresse', 'Groupe', 'Date d\'ajout'])
+
+                # Récupérer les contacts depuis la base de données
+                con = sqlite3.connect('carnet_adresses.db')
+                cuser = con.cursor()
+                select = cuser.execute("SELECT * FROM contacts")
+                for row in select:
+                    # Écrire chaque ligne de contact dans le fichier CSV
+                    writer.writerow(row)
+
+                con.close()
+
+            messagebox.showinfo("Exportation réussie", "Les contacts ont été exportés avec succès en format CSV.")
+    except Exception as e:
+        messagebox.showerror("Erreur d'exportation", f"Une erreur s'est produite lors de l'exportation : {str(e)}")
+
+# Fonction pour importer les contacts depuis un fichier CSV
+def importer_csv():
+    global fichier_csv  # Utiliser la variable globale fichier_csv
+    try:
+        # ... (le reste du code)
+
+        # Demander à l'utilisateur de choisir le fichier CSV à importer
+        fichier_csv = filedialog.askopenfilename(defaultextension=".csv", filetypes=[("Fichiers CSV", "*.csv")])
+
+        if fichier_csv:
+            # Ouvrir le fichier CSV en mode lecture
+            with open(fichier_csv, mode='r', encoding='utf-8') as fichier:
+                reader = csv.reader(fichier)
+
+                # Ignorer l'en-tête
+                next(reader, None)
+
+                # Parcourir les lignes du fichier CSV et insérer ou mettre à jour les contacts dans la base de données
+                con = sqlite3.connect('carnet_adresses.db')
+                cuser = con.cursor()
+
+                for row in reader:
+                    # Vérifier le nombre de colonnes dans la ligne
+                    if len(row) == 7:
+                        nom, prenom, email, telephone, adresse, groupe, date_ajout = row
+
+                        # Vérifier si le contact existe déjà dans la base de données
+                        cuser.execute("SELECT * FROM contacts WHERE nom=? AND prenom=?", (nom, prenom))
+                        existing_contact = cuser.fetchone()
+
+                        if existing_contact:
+                            # Mettre à jour le contact existant
+                            cuser.execute(
+                                "UPDATE contacts SET email=?, telephone=?, adresse=?, groupe=?, date_ajout=? WHERE id=?",
+                                (email, telephone, adresse, groupe, date_ajout, existing_contact[0])
+                            )
+                        else:
+                            # Ajouter un nouveau contact
+                            cuser.execute(
+                                "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
+                                (nom, prenom, email, telephone, adresse, groupe, date_ajout)
+                            )
+
+                con.commit()
+                con.close()
+
+            messagebox.showinfo("Importation réussie", "Les contacts ont été importés avec succès depuis le fichier CSV.")
+            # Rafraîchir la table pour afficher les nouveaux contacts importés
+            afficher_contacts()
+    except Exception as e:
+        messagebox.showerror("Erreur d'importation", f"Une erreur s'est produite lors de l'importation : {str(e)}")
+
+def contact_existe(nom, prenom):
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    select = cuser.execute("SELECT * FROM contacts WHERE nom=? AND prenom=?", (nom, prenom))
+    contact = select.fetchone()
+    con.close()
+    return contact is not None
+
+    # Vérifier si le contact existe déjà
+    if contact_existe(nom, prenom):
+        messagebox.showerror("Erreur", "Ce contact existe déjà dans le carnet d'adresses.")
+        return
+
+# Ajout du titre
+lbltitre = Label(root, bd=20, relief=RIDGE, text="GESTION DES CONTACTS CHEZ INA", font=("Arial", 20), bg="SteelBlue",
+                 fg="white")
+lbltitre.place(x=-100, y=0, width=1470)
+
+# Liste des contacts
+lblListeContact = Label(root, text="LISTES DES CONTACTS ", font=("Arial", 16), bg="SteelBlue", fg="white")
+lblListeContact.place(x=500, y=90, width=760)
+
+# text nom
+lblnom = Label(root, text="Nom :", font=("Arial", 16), fg="black")
+lblnom.place(x=0, y=150, width=200)
+entrernom = Entry(root)
+entrernom.place(x=150, y=150, width=200, height=30)
+
+# text prenom
+lblPrenom = Label(root, text="Prenom : ", font=("Arial", 16), fg="black")
+lblPrenom.place(x=0, y=200, width=200)
+entrerPrenom = Entry(root)
+entrerPrenom.place(x=150, y=200, width=200, height=30)
+
+# text e-mail
+lblmail = Label(root, text="E-mail : ", font=("Arial", 16), fg="black")
+lblmail.place(x=0, y=250, width=200)
+entrermail = Entry(root)
+entrermail.place(x=150, y=250, width="300", height=30)
+
+# text Telephone
+lbltelephone = Label(root, text="Telephone :", font=("Arial", 16), fg="black")
+lbltelephone.place(x=0, y=300, width=200)
+entrertelephone = Entry(root)
+entrertelephone.place(x=170, y=300, width=200, height=30)
+
+# text adresse
+lbladresse = Label(root, text="Adresse :", font=("Arial", 16), fg="black")
+lbladresse.place(x=-5, y=350, width=200)
+entreradresse = Entry(root)
+entreradresse.place(x=150, y=350, width="300", height=30)
+
+# text groupe
+lblgroupe = Label(root, text="Groupe :", font=("Arial", 16), fg="black")
+lblgroupe.place(x=-5, y=400, width=200)
+entrergroupe = Entry(root)
+entrergroupe.place(x=150, y=400, width="200", height=30)
+
+
+# Enregistrer
+btnenregistrer = Button(root, text="Enregistrer", font=("Arial", 16), bg="darkblue", fg="white", command=ajouter)
+btnenregistrer.place(x=30, y=450, width=200)
+
+# modifier
+btnmodofier = Button(root, text="Modifier", font=("Arial", 16), bg="darkblue", fg="white", command=modifier)
+btnmodofier.place(x=270, y=450, width=200)
+
+# Supprimer
+btnSupprimer = Button(root, text="Supprimer", font=("Arial", 16), bg="darkblue", fg="white", command=supprimer)
+btnSupprimer.place(x=150, y=500, width=200)
+
+# Champ de recherche par nom
+lblRechercheNom = Label(root, text="Recherche par Nom:", font=("Arial", 12), fg="black")
+lblRechercheNom.place(x=500, y=130, width=150)
+entryRechercheNom = Entry(root)
+entryRechercheNom.place(x=650, y=130, width=150, height=30)
+
+# Champ de recherche par email
+lblRechercheEmail = Label(root, text="Recherche par email:", font=("Arial", 12), fg="black")
+lblRechercheEmail.place(x=810, y=130, width=150)
+entryRechercheEmail = Entry(root)
+entryRechercheEmail.place(x=980, y=130, width=150, height=30)
+
+# Bouton de recherche
+btnRecherche = Button(root, text="Rechercher", font=("Arial", 12), bg="darkblue", fg="white", command=rechercher_contact)
+btnRecherche.place(x=1150, y=130, width=100)
+
+# Boutons de tri
+btnTriNom = Button(root, text="Trier par Nom", font=("Arial", 12), bg="darkblue", fg="white", command=tri_par_nom)
+btnTriNom.place(x=500, y=540, width=150)
+
+btnTriDate = Button(root, text="Trier par Date", font=("Arial", 12), bg="darkblue", fg="white", command=tri_par_date)
+btnTriDate.place(x=660, y=540, width=150)
+
+# Boutons de filtres avancés
+lblFiltreGroupe = Label(root, text="Filtrer par Groupe:", font=("Arial", 12), fg="black")
+lblFiltreGroupe.place(x=840, y=540, width=150)
+entrergroupe = Entry(root)
+entrergroupe.place(x=990, y=540, width=150, height=30)
+
+btnFiltreGroupe = Button(root, text="Filtrer", font=("Arial", 12), bg="darkblue", fg="white", command=filtre_par_groupe)
+btnFiltreGroupe.place(x=1150, y=540, width=100)
+
+# Ajouter ces liaisons aux boutons correspondants
+btnExporterCSV = Button(root, text="Exporter en CSV", font=("Arial", 12), bg="darkblue", fg="white", command=exporter_csv)
+btnExporterCSV.place(x=500, y=590, width=150)
+
+btnImporterCSV = Button(root, text="Importer depuis CSV", font=("Arial", 12), bg="darkblue", fg="white", command=importer_csv)
+btnImporterCSV.place(x=670, y=590, width=200)
+# Table
+table = ttk.Treeview(root, columns=(1, 2, 3, 4, 5, 6, 7, 8), height=3, show="headings")
+table.place(x=500, y=180, width=760, height=350)
+
+# Associer la fonction à l'événement de relâchement du bouton gauche de la souris
+table.bind('<ButtonRelease-1>', afficher_donnees_selectionnees)
+
+
+# Headings
+table.heading(1, text="ID", anchor=CENTER)
+table.heading(2, text="NOM", anchor=CENTER)
+table.heading(3, text="PRENOM", anchor=CENTER)
+table.heading(4, text="E-MAIL", anchor=CENTER)
+table.heading(5, text="TELEPHONE", anchor=CENTER)
+table.heading(6, text="ADRESSE", anchor=CENTER)
+table.heading(7, text="GROUPE", anchor=CENTER)
+table.heading(8, text="DATE", anchor=CENTER)
+
+# définir les dimentions des colonnes
+table.column(1, width=50, anchor=CENTER)
+table.column(2, width=100, anchor=CENTER)
+table.column(3, width=100, anchor=CENTER)
+table.column(4, width=150, anchor=CENTER)
+table.column(5, width=150, anchor=CENTER)
+table.column(6, width=150, anchor=CENTER)
+table.column(7, width=150, anchor=CENTER)
+table.column(8, width=150, anchor=CENTER)
+
+# Création d'une scrollbar
+scrollbar = Scrollbar(root, orient="vertical", bg="white", command=table.yview)
+scrollbar.place(x=1240, y=185, height=340)
+
+# Création d'une scrollbar horizontal
+scrollbar2 = Scrollbar(root, orient="horizontal", bg="white", command=table.xview)
+scrollbar2.place(x=505, y=510, width=735)
+
+# Configurer la table pour utiliser la scrollbar
+table.configure(yscrollcommand=scrollbar.set, xscrollcommand=scrollbar2.set)
+
+# Fonction pour afficher les données dans la table contatcs
+def afficher_contacts():
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    select = cuser.execute("select * from contacts order by id ASC ")
+    for row in select:
+        table.insert('', END, values=row)
+    con.close()
+
+
+# appel de la fonction
+afficher_contacts()
+
+root.mainloop()
