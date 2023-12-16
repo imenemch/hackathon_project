@@ -8,5 +8,12 @@
       <jdbc-url>jdbc:sqlite:C:\Users\Leila\PycharmProjects\hackaton\carnet_adresses.db</jdbc-url>
       <working-dir>$ProjectFileDir$</working-dir>
     </data-source>
+    <data-source source="LOCAL" name="carnet_adresses.db" uuid="aa7ceac8-2c60-4454-9b10-476fc75414f6">
+      <driver-ref>sqlite.xerial</driver-ref>
+      <synchronize>true</synchronize>
+      <jdbc-driver>org.sqlite.JDBC</jdbc-driver>
+      <jdbc-url>jdbc:sqlite:$PROJECT_DIR$/carnet_adresses.db</jdbc-url>
+      <working-dir>$ProjectFileDir$</working-dir>
+    </data-source>
   </component>
 </project>

@@ -7,7 +7,10 @@ from tkinter import messagebox
 import sqlite3
 import os
 
+<<<<<<< HEAD
 fichier_csv = None
+=======
+>>>>>>> adefabba7e697abe6c07d384e1192d6542d6a97b
 # titre general
 root = Tk()
 root.title("Carnet d'addresses")
@@ -32,6 +35,7 @@ def ajouter():
         messagebox.showerror("Erreur", "Format d'e-mail invalide.")
         return  # Arrêter la fonction si l'e-mail est invalide
 
+<<<<<<< HEAD
     # Vérifier si le contact existe déjà
     if contact_existe(nom, prenom):
         messagebox.showerror("Erreur", "Ce contact existe déjà dans le carnet d'adresses.")
@@ -145,6 +149,116 @@ def modifier():
 
         messagebox.showinfo("Succès", "Contact modifié avec succès !!")
 
+=======
+    # Création de la connexion
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    # Convertir la date en chaîne au format ISO 8601
+    date_ajout = datetime.today().isoformat()
+
+    cuser.execute(
+        "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
+        (nom, prenom, email, tel, adresse, groupe, date_ajout))
+
+    # Récupérer l'ID de la dernière ligne insérée
+    last_id = cuser.lastrowid
+
+    con.commit()
+    con.close()
+
+    # Afficher le dernier contact ajouté
+    con = sqlite3.connect('carnet_adresses.db')
+    cuser = con.cursor()
+    select = cuser.execute(f"SELECT * FROM contacts WHERE id = {last_id}")
+    row = select.fetchone()
+    table.insert('', END, values=row)
+    con.close()
+
+    # Afficher le message d'information
+    messagebox.showinfo("Succès", "Contact ajouté avec succès!")
+
+    # Effacer les entrées
+    entrernom.delete(0, END)
+    entrerPrenom.delete(0, END)
+    entrermail.delete(0, END)
+    entrertelephone.delete(0, END)
+    entreradresse.delete(0, END)
+    entrergroupe.delete(0, END)
+
+def afficher_donnees_selectionnees(event):
+    # Récupérer l'ID de l'élément sélectionné
+    contact = table.selection()
+    if contact:
+        values = table.item(contact, 'values')
+        entrernom.delete(0, END)
+        entrerPrenom.delete(0, END)
+        entrermail.delete(0, END)
+        entrertelephone.delete(0, END)
+        entreradresse.delete(0, END)
+        entrergroupe.delete(0, END)
+
+        entrernom.insert(0, values[1])
+        entrerPrenom.insert(0, values[2])
+        entrermail.insert(0, values[3])
+        entrertelephone.insert(0, values[4])
+        entreradresse.insert(0, values[5])
+        entrergroupe.insert(0,values[6])
+
+
+def modifier():
+    # Récupérer l'ID de l'élément sélectionné
+    contact = table.selection()
+    if contact:
+        id_selectionne = table.item(contact)['values'][0]
+        nom_selectionne = table.item(contact)['values'][1]
+        prenom_selectionne = table.item(contact)['values'][2]
+        email_selectionne = table.item(contact)['values'][3]
+        telephone_selectionne = table.item(contact)['values'][4]
+        adresse_selectionne = table.item(contact)['values'][5]
+        groupe_selectionne = table.item(contact)['values'][6]
+        date_selectionne = table.item(contact)['values'][7]
+
+        # Récupérer les nouvelles valeurs des entrées
+        nom = entrernom.get()
+        prenom = entrerPrenom.get()
+        email = entrermail.get()
+        telephone = entrertelephone.get()
+        adresse = entreradresse.get()
+        groupe = entrergroupe.get()
+
+
+        # Vérifier les modifications et mettre à jour les champs modifiés
+        if not nom:
+            nom = nom_selectionne
+        if not prenom:
+            prenom = prenom_selectionne
+        if not email:
+            email = email_selectionne
+        if not telephone:
+            telephone = telephone_selectionne
+        if not adresse:
+            adresse = adresse_selectionne
+        if not groupe:
+            groupe = groupe_selectionne
+
+        # Afficher la date sélectionnée dans la console
+        print(f"Date sélectionnée : {id_selectionne}")
+
+        # Mettre à jour les informations du contact dans la base de données
+        con = sqlite3.connect('carnet_adresses.db')
+        cuser = con.cursor()
+        cuser.execute(
+            "UPDATE contacts SET nom=?, prenom=?, email=?, telephone=?, adresse=?, groupe=?, date_ajout=? WHERE id = ?",
+            (nom, prenom, email, telephone, adresse, groupe, date_selectionne, id_selectionne))
+        con.commit()
+        con.close()
+
+        # Mettre à jour la ligne existante dans la table
+        table.item(contact, values=(id_selectionne, nom, prenom, email, telephone, adresse,groupe))
+
+        messagebox.showinfo("Succès", "Contact modifié avec succès !!")
+
+>>>>>>> adefabba7e697abe6c07d384e1192d6542d6a97b
         # Effacer les entrées
         entrernom.delete(0, END)
         entrerPrenom.delete(0, END)
@@ -263,10 +377,14 @@ def exporter_csv():
 
 # Fonction pour importer les contacts depuis un fichier CSV
 def importer_csv():
+<<<<<<< HEAD
     global fichier_csv  # Utiliser la variable globale fichier_csv
     try:
         # ... (le reste du code)
 
+=======
+    try:
+>>>>>>> adefabba7e697abe6c07d384e1192d6542d6a97b
         # Demander à l'utilisateur de choisir le fichier CSV à importer
         fichier_csv = filedialog.askopenfilename(defaultextension=".csv", filetypes=[("Fichiers CSV", "*.csv")])
 
@@ -278,11 +396,16 @@ def importer_csv():
                 # Ignorer l'en-tête
                 next(reader, None)
 
+<<<<<<< HEAD
                 # Parcourir les lignes du fichier CSV et insérer ou mettre à jour les contacts dans la base de données
+=======
+                # Parcourir les lignes du fichier CSV et insérer les contacts dans la base de données
+>>>>>>> adefabba7e697abe6c07d384e1192d6542d6a97b
                 con = sqlite3.connect('carnet_adresses.db')
                 cuser = con.cursor()
 
                 for row in reader:
+<<<<<<< HEAD
                     # Vérifier le nombre de colonnes dans la ligne
                     if len(row) == 7:
                         nom, prenom, email, telephone, adresse, groupe, date_ajout = row
@@ -303,6 +426,13 @@ def importer_csv():
                                 "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
                                 (nom, prenom, email, telephone, adresse, groupe, date_ajout)
                             )
+=======
+                    # Insérer chaque ligne du fichier CSV dans la base de données
+                    cuser.execute(
+                        "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
+                        tuple(row)
+                    )
+>>>>>>> adefabba7e697abe6c07d384e1192d6542d6a97b
 
                 con.commit()
                 con.close()
@@ -474,4 +604,8 @@ def afficher_contacts():
 # appel de la fonction
 afficher_contacts()
 
+<<<<<<< HEAD
 root.mainloop()
+=======
+root.mainloop()
+>>>>>>> adefabba7e697abe6c07d384e1192d6542d6a97b
