@@ -3,8 +3,8 @@ import csv
 from datetime import datetime
 from tkinter import ttk, filedialog
 from tkinter import *
-from tkinter import messagebox
 import sqlite3
+from tkinter import messagebox
 import os
 
 fichier_csv = None
@@ -113,38 +113,30 @@ def modifier():
         adresse = entreradresse.get()
         groupe = entrergroupe.get()
 
-
-        # Vérifier les modifications et mettre à jour les champs modifiés
-        if not nom:
-            nom = nom_selectionne
-        if not prenom:
-            prenom = prenom_selectionne
-        if not email:
-            email = email_selectionne
-        if not telephone:
-            telephone = telephone_selectionne
-        if not adresse:
-            adresse = adresse_selectionne
-        if not groupe:
-            groupe = groupe_selectionne
-
-        # Afficher la date sélectionnée dans la console
-        print(f"Date sélectionnée : {id_selectionne}")
+        # Obtenir la date actuelle
+        date_ajout = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         # Mettre à jour les informations du contact dans la base de données
         con = sqlite3.connect('carnet_adresses.db')
         cuser = con.cursor()
         cuser.execute(
             "UPDATE contacts SET nom=?, prenom=?, email=?, telephone=?, adresse=?, groupe=?, date_ajout=? WHERE id = ?",
-            (nom, prenom, email, telephone, adresse, groupe, date_selectionne, id_selectionne))
+            (nom, prenom, email, telephone, adresse, groupe, date_ajout, id_selectionne))
         con.commit()
         con.close()
 
         # Mettre à jour la ligne existante dans la table
-        table.item(contact, values=(id_selectionne, nom, prenom, email, telephone, adresse,groupe))
+        table.item(contact, values=(id_selectionne, nom, prenom, email, telephone, adresse, groupe, date_ajout))
+
+        # Effacer les entrées
+        entrernom.delete(0, END)
+        entrerPrenom.delete(0, END)
+        entrermail.delete(0, END)
+        entrertelephone.delete(0, END)
+        entreradresse.delete(0, END)
+        entrergroupe.delete(0, END)
 
         messagebox.showinfo("Succès", "Contact modifié avec succès !!")
-
         # Effacer les entrées
         entrernom.delete(0, END)
         entrerPrenom.delete(0, END)
@@ -263,11 +255,8 @@ def exporter_csv():
 
 # Fonction pour importer les contacts depuis un fichier CSV
 def importer_csv():
-    global fichier_csv  # Utiliser la variable globale fichier_csv
     try:
-        # ... (le reste du code)
-
-        # Demander à l'utilisateur de choisir le fichier CSV à importer
+        # Demander à l'utilisateur de sélectionner le fichier CSV à importer
         fichier_csv = filedialog.askopenfilename(defaultextension=".csv", filetypes=[("Fichiers CSV", "*.csv")])
 
         if fichier_csv:
@@ -276,42 +265,47 @@ def importer_csv():
                 reader = csv.reader(fichier)
 
                 # Ignorer l'en-tête
-                next(reader, None)
+                next(reader)
 
-                # Parcourir les lignes du fichier CSV et insérer ou mettre à jour les contacts dans la base de données
+                # Utiliser une seule connexion pour tout le processus d'importation
                 con = sqlite3.connect('carnet_adresses.db')
                 cuser = con.cursor()
 
+                # Parcourir chaque ligne du fichier CSV et l'ajouter à la base de données
                 for row in reader:
-                    # Vérifier le nombre de colonnes dans la ligne
-                    if len(row) == 7:
-                        nom, prenom, email, telephone, adresse, groupe, date_ajout = row
+                    if len(row) == 8:  # Check that the row has the correct number of values
+                        try:
+                            # Extract fields excluding the 'id' field
+                            nom, prenom, email, telephone, adresse, groupe, date_ajout = row
 
-                        # Vérifier si le contact existe déjà dans la base de données
-                        cuser.execute("SELECT * FROM contacts WHERE nom=? AND prenom=?", (nom, prenom))
-                        existing_contact = cuser.fetchone()
+                            # Convert date string to datetime object
+                            date_ajout = datetime.strptime(date_ajout, "%Y-%m-%d %H:%M:%S")
 
-                        if existing_contact:
-                            # Mettre à jour le contact existant
-                            cuser.execute(
-                                "UPDATE contacts SET email=?, telephone=?, adresse=?, groupe=?, date_ajout=? WHERE id=?",
-                                (email, telephone, adresse, groupe, date_ajout, existing_contact[0])
-                            )
-                        else:
-                            # Ajouter un nouveau contact
+                            # Ajouter des impressions de débogage
+                            print(f"Ajout du contact : {nom} {prenom} {email} {telephone} {adresse} {groupe} {date_ajout}")
+
+                            # Ajouter le contact à la base de données
                             cuser.execute(
                                 "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
-                                (nom, prenom, email, telephone, adresse, groupe, date_ajout)
-                            )
+                                (nom, prenom, email, telephone, adresse, groupe, date_ajout))
+
+                        except ValueError:
+                            print(f"Erreur de déballage dans la ligne : {row}")
+                            continue
+                    else:
+                        print(f"Nombre incorrect de colonnes dans la ligne : {row}")
 
                 con.commit()
-                con.close()
+                con.close()  # Fermer la connexion après avoir inséré toutes les lignes
 
-            messagebox.showinfo("Importation réussie", "Les contacts ont été importés avec succès depuis le fichier CSV.")
-            # Rafraîchir la table pour afficher les nouveaux contacts importés
-            afficher_contacts()
+                # Rafraîchir la table pour afficher les nouveaux contacts
+                table.delete(*table.get_children())
+                afficher_contacts()
+
+                messagebox.showinfo("Importation réussie", "Les contacts ont été importés avec succès depuis le fichier CSV.")
     except Exception as e:
         messagebox.showerror("Erreur d'importation", f"Une erreur s'est produite lors de l'importation : {str(e)}")
+        print(f"Erreur d'importation : {str(e)}")
 
 def contact_existe(nom, prenom):
     con = sqlite3.connect('carnet_adresses.db')
@@ -335,53 +329,58 @@ lbltitre.place(x=-100, y=0, width=1470)
 lblListeContact = Label(root, text="LISTES DES CONTACTS ", font=("Arial", 16), bg="SteelBlue", fg="white")
 lblListeContact.place(x=500, y=90, width=760)
 
+# Largeur fixe pour chaque colonne
+label_width = 200
+entry_width = 200
+x_offset = 200  # Espace entre les labels et les entrées
+
 # text nom
 lblnom = Label(root, text="Nom :", font=("Arial", 16), fg="black")
-lblnom.place(x=0, y=150, width=200)
+lblnom.place(x=0, y=150, width=label_width)
 entrernom = Entry(root)
-entrernom.place(x=150, y=150, width=200, height=30)
+entrernom.place(x=x_offset, y=150, width=entry_width, height=30)
 
 # text prenom
 lblPrenom = Label(root, text="Prenom : ", font=("Arial", 16), fg="black")
-lblPrenom.place(x=0, y=200, width=200)
+lblPrenom.place(x=0, y=200, width=label_width)
 entrerPrenom = Entry(root)
-entrerPrenom.place(x=150, y=200, width=200, height=30)
+entrerPrenom.place(x=x_offset, y=200, width=entry_width, height=30)
 
 # text e-mail
 lblmail = Label(root, text="E-mail : ", font=("Arial", 16), fg="black")
-lblmail.place(x=0, y=250, width=200)
+lblmail.place(x=0, y=250, width=label_width)
 entrermail = Entry(root)
-entrermail.place(x=150, y=250, width="300", height=30)
+entrermail.place(x=x_offset, y=250, width=entry_width, height=30)
 
 # text Telephone
 lbltelephone = Label(root, text="Telephone :", font=("Arial", 16), fg="black")
-lbltelephone.place(x=0, y=300, width=200)
+lbltelephone.place(x=0, y=300, width=label_width)
 entrertelephone = Entry(root)
-entrertelephone.place(x=170, y=300, width=200, height=30)
+entrertelephone.place(x=x_offset, y=300, width=entry_width, height=30)
 
 # text adresse
 lbladresse = Label(root, text="Adresse :", font=("Arial", 16), fg="black")
-lbladresse.place(x=-5, y=350, width=200)
+lbladresse.place(x=0, y=350, width=label_width)
 entreradresse = Entry(root)
-entreradresse.place(x=150, y=350, width="300", height=30)
+entreradresse.place(x=x_offset, y=350, width=entry_width, height=30)
 
 # text groupe
 lblgroupe = Label(root, text="Groupe :", font=("Arial", 16), fg="black")
-lblgroupe.place(x=-5, y=400, width=200)
+lblgroupe.place(x=0, y=400, width=label_width)
 entrergroupe = Entry(root)
-entrergroupe.place(x=150, y=400, width="200", height=30)
+entrergroupe.place(x=x_offset, y=400, width=entry_width, height=30)
 
 
 # Enregistrer
-btnenregistrer = Button(root, text="Enregistrer", font=("Arial", 16), bg="darkblue", fg="white", command=ajouter)
+btnenregistrer = Button(root, text="Enregistrer", font=("Arial", 16), bg="green", fg="white", command=ajouter)
 btnenregistrer.place(x=30, y=450, width=200)
 
 # modifier
-btnmodofier = Button(root, text="Modifier", font=("Arial", 16), bg="darkblue", fg="white", command=modifier)
+btnmodofier = Button(root, text="Modifier", font=("Arial", 16), bg="grey", fg="white", command=modifier)
 btnmodofier.place(x=270, y=450, width=200)
 
 # Supprimer
-btnSupprimer = Button(root, text="Supprimer", font=("Arial", 16), bg="darkblue", fg="white", command=supprimer)
+btnSupprimer = Button(root, text="Supprimer", font=("Arial", 16), bg="red", fg="white", command=supprimer)
 btnSupprimer.place(x=150, y=500, width=200)
 
 # Champ de recherche par nom
@@ -425,6 +424,8 @@ btnImporterCSV.place(x=670, y=590, width=200)
 # Table
 table = ttk.Treeview(root, columns=(1, 2, 3, 4, 5, 6, 7, 8), height=3, show="headings")
 table.place(x=500, y=180, width=760, height=350)
+
+
 
 # Associer la fonction à l'événement de relâchement du bouton gauche de la souris
 table.bind('<ButtonRelease-1>', afficher_donnees_selectionnees)
