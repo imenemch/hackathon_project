@@ -5,9 +5,10 @@ from tkinter import ttk, filedialog
 from tkinter import *
 import sqlite3
 from tkinter import messagebox
+import pandas as pd
 import os
 
-fichier_csv = None
+
 # titre general
 root = Tk()
 root.title("Carnet d'addresses")
@@ -20,7 +21,7 @@ def ajouter():
     email = entrermail.get()
     tel = entrertelephone.get()
     adresse = entreradresse.get()
-    groupe = entrergroupe.get()
+    groupe = entrergroupeC.get()
 
     # Vérifier si les champs obligatoires ne sont pas vides
     if not nom or not prenom or not email or not tel or not adresse:
@@ -32,8 +33,8 @@ def ajouter():
         messagebox.showerror("Erreur", "Format d'e-mail invalide.")
         return  # Arrêter la fonction si l'e-mail est invalide
 
-    # Vérifier si le contact existe déjà
-    if contact_existe(nom, prenom):
+    # Vérifier si le contact existe déjà par email ou téléphone
+    if contact_existe(email, tel):
         messagebox.showerror("Erreur", "Ce contact existe déjà dans le carnet d'adresses.")
         return
 
@@ -70,7 +71,7 @@ def ajouter():
     entrermail.delete(0, END)
     entrertelephone.delete(0, END)
     entreradresse.delete(0, END)
-    entrergroupe.delete(0, END)
+    entrergroupeC.delete(0, END)
 
 def afficher_donnees_selectionnees(event):
     # Récupérer l'ID de l'élément sélectionné
@@ -82,14 +83,14 @@ def afficher_donnees_selectionnees(event):
         entrermail.delete(0, END)
         entrertelephone.delete(0, END)
         entreradresse.delete(0, END)
-        entrergroupe.delete(0, END)
+        entrergroupeC.delete(0, END)
 
         entrernom.insert(0, values[1])
         entrerPrenom.insert(0, values[2])
         entrermail.insert(0, values[3])
         entrertelephone.insert(0, values[4])
         entreradresse.insert(0, values[5])
-        entrergroupe.insert(0,values[6])
+        entrergroupeC.insert(0,values[6])
 
 
 def modifier():
@@ -111,7 +112,7 @@ def modifier():
         email = entrermail.get()
         telephone = entrertelephone.get()
         adresse = entreradresse.get()
-        groupe = entrergroupe.get()
+        groupe = entrergroupeC.get()
 
         # Obtenir la date actuelle
         date_ajout = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -134,7 +135,7 @@ def modifier():
         entrermail.delete(0, END)
         entrertelephone.delete(0, END)
         entreradresse.delete(0, END)
-        entrergroupe.delete(0, END)
+        entrergroupeC.delete(0, END)
 
         messagebox.showinfo("Succès", "Contact modifié avec succès !!")
         # Effacer les entrées
@@ -143,7 +144,7 @@ def modifier():
         entrermail.delete(0, END)
         entrertelephone.delete(0, END)
         entreradresse.delete(0, END)
-        entrergroupe.delete(0, END)
+        entrergroupeC.delete(0, END)
 
 def supprimer():
     idSelectionner = table.item(table.selection())['values'][0]
@@ -159,7 +160,7 @@ def supprimer():
     entrermail.delete(0, END)
     entrertelephone.delete(0, END)
     entreradresse.delete(0, END)
-    entrergroupe.delete(0, END)
+    entrergroupeC.delete(0, END)
 
 def rechercher_contact():
     # Récupérer les critères de recherche
@@ -220,7 +221,7 @@ def filtre_par_groupe():
     # Récupérer les contacts filtrés par groupe depuis la base de données
     con = sqlite3.connect('carnet_adresses.db')
     cuser = con.cursor()
-    select = cuser.execute("SELECT * FROM contacts WHERE groupe = ? ORDER BY id ASC", (entrergroupe.get(),))
+    select = cuser.execute("SELECT * FROM contacts WHERE groupe = ? ORDER BY id ASC", (entrerGroupe.get(),))
     for row in select:
         table.insert('', END, values=row)
     con.close()
@@ -256,77 +257,74 @@ def exporter_csv():
 # Fonction pour importer les contacts depuis un fichier CSV
 def importer_csv():
     try:
-        # Demander à l'utilisateur de sélectionner le fichier CSV à importer
+        # Demander à l'utilisateur de sélectionner un fichier CSV
         fichier_csv = filedialog.askopenfilename(defaultextension=".csv", filetypes=[("Fichiers CSV", "*.csv")])
 
         if fichier_csv:
-            # Ouvrir le fichier CSV en mode lecture
-            with open(fichier_csv, mode='r', encoding='utf-8') as fichier:
-                reader = csv.reader(fichier)
+            # Charger le fichier CSV dans un DataFrame pandas
+            df = pd.read_csv(fichier_csv)
 
-                # Ignorer l'en-tête
-                next(reader)
-
-                # Utiliser une seule connexion pour tout le processus d'importation
+            # Vérifier si le DataFrame a les colonnes nécessaires
+            if set(['Nom', 'Prenom', 'E-mail', 'Telephone', 'Adresse', 'Groupe']).issubset(df.columns):
+                # Création de la connexion à la base de données
                 con = sqlite3.connect('carnet_adresses.db')
                 cuser = con.cursor()
 
-                # Parcourir chaque ligne du fichier CSV et l'ajouter à la base de données
-                for row in reader:
-                    if len(row) == 8:  # Check that the row has the correct number of values
-                        try:
-                            # Extract fields excluding the 'id' field
-                            nom, prenom, email, telephone, adresse, groupe, date_ajout = row
+                # Parcourir chaque ligne du DataFrame et ajouter les contacts à la base de données
+                for _, row in df.iterrows():
+                    nom = row['Nom']
+                    prenom = row['Prenom']
+                    email = row['E-mail']
+                    telephone = row['Telephone']
+                    adresse = row['Adresse']
+                    groupe = row['Groupe']
 
-                            # Convert date string to datetime object
-                            date_ajout = datetime.strptime(date_ajout, "%Y-%m-%d %H:%M:%S")
+                    # Vérifier si le contact existe déjà
+                    if contact_existe(nom, prenom):
+                        messagebox.showerror("Erreur d'importation",
+                                             f"Le contact {nom} {prenom} existe déjà dans la base de données.")
+                        continue
 
-                            # Ajouter des impressions de débogage
-                            print(f"Ajout du contact : {nom} {prenom} {email} {telephone} {adresse} {groupe} {date_ajout}")
+                    # Convertir la date en chaîne au format ISO 8601
+                    date_ajout = datetime.today().isoformat()
 
-                            # Ajouter le contact à la base de données
-                            cuser.execute(
-                                "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
-                                (nom, prenom, email, telephone, adresse, groupe, date_ajout))
-
-                        except ValueError:
-                            print(f"Erreur de déballage dans la ligne : {row}")
-                            continue
-                    else:
-                        print(f"Nombre incorrect de colonnes dans la ligne : {row}")
+                    # Ajouter le contact à la base de données
+                    cuser.execute(
+                        "INSERT INTO contacts('nom','prenom','email','telephone','adresse', 'groupe','date_ajout') VALUES (?,?,?,?,?,?,?)",
+                        (nom, prenom, email, telephone, adresse, groupe, date_ajout))
 
                 con.commit()
-                con.close()  # Fermer la connexion après avoir inséré toutes les lignes
+                con.close()
+
+                # Afficher un message de réussite
+                messagebox.showinfo("Importation réussie",
+                                    "Les contacts ont été importés avec succès dans la base de données.")
 
                 # Rafraîchir la table pour afficher les nouveaux contacts
                 table.delete(*table.get_children())
                 afficher_contacts()
 
-                messagebox.showinfo("Importation réussie", "Les contacts ont été importés avec succès depuis le fichier CSV.")
+            else:
+                messagebox.showerror("Erreur d'importation",
+                                     "Le fichier CSV doit contenir les colonnes: Nom, Prenom, E-mail, Telephone, Adresse, Groupe.")
     except Exception as e:
         messagebox.showerror("Erreur d'importation", f"Une erreur s'est produite lors de l'importation : {str(e)}")
-        print(f"Erreur d'importation : {str(e)}")
-
-def contact_existe(nom, prenom):
+def contact_existe(email, tel):
     con = sqlite3.connect('carnet_adresses.db')
     cuser = con.cursor()
-    select = cuser.execute("SELECT * FROM contacts WHERE nom=? AND prenom=?", (nom, prenom))
+    select = cuser.execute("SELECT * FROM contacts WHERE email=? OR telephone=?", (email, tel))
     contact = select.fetchone()
     con.close()
     return contact is not None
 
-    # Vérifier si le contact existe déjà
-    if contact_existe(nom, prenom):
-        messagebox.showerror("Erreur", "Ce contact existe déjà dans le carnet d'adresses.")
-        return
 
 # Ajout du titre
-lbltitre = Label(root, bd=20, relief=RIDGE, text="GESTION DES CONTACTS CHEZ INA", font=("Arial", 20), bg="SteelBlue",
+lbltitre = Label(root, bd=20, relief=RIDGE, text="PyStockBook", font=("Arial", 20), bg="SteelBlue",
                  fg="white")
 lbltitre.place(x=-100, y=0, width=1470)
 
 # Liste des contacts
-lblListeContact = Label(root, text="LISTES DES CONTACTS ", font=("Arial", 16), bg="SteelBlue", fg="white")
+lblListeContact = Label(root, text="La liste des contacts ", font=("Arial", 16), bg="SteelBlue", fg="white")
 lblListeContact.place(x=500, y=90, width=760)
 
 # Largeur fixe pour chaque colonne
@@ -367,8 +365,8 @@ entreradresse.place(x=x_offset, y=350, width=entry_width, height=30)
 # text groupe
 lblgroupe = Label(root, text="Groupe :", font=("Arial", 16), fg="black")
 lblgroupe.place(x=0, y=400, width=label_width)
-entrergroupe = Entry(root)
-entrergroupe.place(x=x_offset, y=400, width=entry_width, height=30)
+entrergroupeC = Entry(root)
+entrergroupeC.place(x=x_offset, y=400, width=entry_width, height=30)
 
 
 # Enregistrer
@@ -409,8 +407,8 @@ btnTriDate.place(x=660, y=540, width=150)
 # Boutons de filtres avancés
 lblFiltreGroupe = Label(root, text="Filtrer par Groupe:", font=("Arial", 12), fg="black")
 lblFiltreGroupe.place(x=840, y=540, width=150)
-entrergroupe = Entry(root)
-entrergroupe.place(x=990, y=540, width=150, height=30)
+entrerGroupe = Entry(root)
+entrerGroupe.place(x=990, y=540, width=150, height=30)
 
 btnFiltreGroupe = Button(root, text="Filtrer", font=("Arial", 12), bg="darkblue", fg="white", command=filtre_par_groupe)
 btnFiltreGroupe.place(x=1150, y=540, width=100)
@@ -441,7 +439,7 @@ table.heading(6, text="ADRESSE", anchor=CENTER)
 table.heading(7, text="GROUPE", anchor=CENTER)
 table.heading(8, text="DATE", anchor=CENTER)
 
-# définir les dimentions des colonnes
+# définir les dimensions des colonnes
 table.column(1, width=50, anchor=CENTER)
 table.column(2, width=100, anchor=CENTER)
 table.column(3, width=100, anchor=CENTER)
@@ -450,6 +448,7 @@ table.column(5, width=150, anchor=CENTER)
 table.column(6, width=150, anchor=CENTER)
 table.column(7, width=150, anchor=CENTER)
 table.column(8, width=150, anchor=CENTER)
+
 
 # Création d'une scrollbar
 scrollbar = Scrollbar(root, orient="vertical", bg="white", command=table.yview)
@@ -462,17 +461,19 @@ scrollbar2.place(x=505, y=510, width=735)
 # Configurer la table pour utiliser la scrollbar
 table.configure(yscrollcommand=scrollbar.set, xscrollcommand=scrollbar2.set)
 
-# Fonction pour afficher les données dans la table contatcs
+
+# Fonction pour afficher les données dans la table contacts
 def afficher_contacts():
     con = sqlite3.connect('carnet_adresses.db')
     cuser = con.cursor()
     select = cuser.execute("select * from contacts order by id ASC ")
     for row in select:
-        table.insert('', END, values=row)
+        # Make sure to use the correct index (6) for the "GROUPE" field
+        table.insert('', END, values=(row[0], row[1], row[2], row[3], row[4], row[5], row[6], row[7]))
     con.close()
 
 
 # appel de la fonction
 afficher_contacts()
 
-root.mainloop()
+root.mainloop()  
